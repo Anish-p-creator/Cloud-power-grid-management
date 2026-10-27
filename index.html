@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GridSync · AWS EV Charging Control</title>
+<meta name="description" content="Live dashboard: AWS serverless cloud infrastructure for smart EV fast-charging and power grid management (Team 4).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23673de6'/><path d='M18 4 8 18h7l-2 10 11-15h-7z' fill='%23fff'/></svg>">
+</head>
+<body>
+<div class="bg-grid" aria-hidden="true"></div>
+
+<header class="nav">
+  <a class="brand" href="#top"><span class="bolt">⚡</span> GridSync<span class="muted">/AWS</span></a>
+  <nav>
+    <a href="#dashboard">Dashboard</a>
+    <a href="#problem">Problem</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#research">Research</a>
+    <a href="#security">Security &amp; Cost</a>
+  </nav>
+</header>
+
+<main id="top">
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-text reveal">
+      <span class="pill"><span class="dot live"></span> Team 4 · Cloud Architecture Design</span>
+      <h1>AWS cloud infrastructure for <span class="grad">smart EV fast-charging</span> &amp; power grid management</h1>
+      <p class="lead">Ten 150–350 kW chargers ramping up at 6 PM can trip a feeder that was never built for that peak. GridSync connects utility <b>OpenADR</b> signals to charger <b>OCPP</b> commands over a serverless AWS pipeline and pushes new power limits in <b>under 2 seconds</b>, before the protection relays trip.</p>
+      <div class="cta">
+        <a class="btn primary" href="#dashboard">Open live dashboard →</a>
+        <a class="btn ghost" href="#architecture">See the architecture</a>
+      </div>
+      <p class="authors">Anish P · 24BCE2394 &nbsp;|&nbsp; Neeraj K · 24BCE2393</p>
+    </div>
+    <div class="hero-stats reveal">
+      <div class="stat"><span class="num" data-count="2" data-prefix="&lt;" data-suffix="s">0</span><span>reaction time during grid stress</span></div>
+      <div class="stat"><span class="num" data-count="35" data-suffix="%">0</span><span>cut in utility peak demand charges</span></div>
+      <div class="stat"><span class="num" data-count="99.99" data-decimals="2" data-suffix="%">0</span><span>cloud uptime for charger connections</span></div>
+      <div class="stat"><span class="num" data-count="0">0</span><span>transformer tripping events</span></div>
+    </div>
+  </section>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="section">
+    <div class="section-head reveal">
+      <h2>Live grid control dashboard</h2>
+      <p>A simulated fast-charging hub on one 1 MW distribution transformer. Switch between a <b>static</b> fixed-limit setup and <b>GridSync</b> AWS control to watch the difference, then send a utility OpenADR event.</p>
+    </div>
+
+    <div class="controls reveal">
+      <div class="seg" role="group" aria-label="Control mode">
+        <button class="seg-btn" data-mode="static">Static limits (baseline)</button>
+        <button class="seg-btn active" data-mode="smart">GridSync AWS control</button>
+      </div>
+      <button id="adrBtn" class="btn warn">⚠ Send OpenADR event: −30% load</button>
+      <button id="rushBtn" class="btn ghost">🚗 Evening rush (plug in all)</button>
+      <label class="speed">Sim speed
+        <input id="speed" type="range" min="1" max="20" value="6">
+      </label>
+      <button id="pauseBtn" class="btn ghost small">❚❚ Pause</button>
+      <div class="clock"><span class="muted">Site time</span> <b id="simClock">17:30</b></div>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi card"><span class="k-label">Transformer load</span><span class="k-val" id="kLoad">0%</span><div class="bar"><i id="kLoadBar"></i></div></div>
+      <div class="kpi card"><span class="k-label">EV charging load</span><span class="k-val" id="kEv">0 kW</span><span class="k-sub" id="kActive">0 active sessions</span></div>
+      <div class="kpi card"><span class="k-label">Last reaction time</span><span class="k-val" id="kReact">—</span><span class="k-sub">target &lt; 2.00 s</span></div>
+      <div class="kpi card"><span class="k-label">Peak demand saved</span><span class="k-val" id="kSaved">0%</span><span class="k-sub" id="kPeak">peak 0 kW vs 0 kW</span></div>
+      <div class="kpi card"><span class="k-label">Tripping events</span><span class="k-val" id="kTrips">0</span><span class="k-sub" id="kTripSub">feeder healthy</span></div>
+      <div class="kpi card"><span class="k-label">IoT Core uptime</span><span class="k-val" id="kUp">99.99%</span><span class="k-sub" id="kConn">8 / 8 chargers connected</span></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="card chart-card">
+        <div class="card-head"><h3>Transformer load (Timestream, rolling)</h3>
+          <div class="legend"><span><i class="sw base"></i>Neighbourhood</span><span><i class="sw ev"></i>EV charging</span><span><i class="sw cap"></i>Rated capacity</span></div>
+        </div>
+        <canvas id="loadChart" height="260"></canvas>
+        <div id="tripBanner" class="trip-banner">⛔ FEEDER TRIPPED: breaker opened on overload. Resetting…</div>
+      </div>
+
+      <div class="card gauge-card">
+        <div class="card-head"><h3>Substation headroom</h3></div>
+        <svg viewBox="0 0 200 120" class="gauge">
+          <path d="M20 110 A80 80 0 0 1 180 110" class="g-track"/>
+          <path id="gArc" d="M20 110 A80 80 0 0 1 180 110" class="g-arc"/>
+          <line id="gNeedle" x1="100" y1="110" x2="100" y2="40" class="g-needle"/>
+          <circle cx="100" cy="110" r="6" class="g-hub"/>
+        </svg>
+        <div class="gauge-read"><b id="gVal">0%</b><span id="gState" class="state ok">NORMAL</span></div>
+        <div class="mini-rows">
+          <div><span>Rated</span><b>1,000 kW</b></div>
+          <div><span>Safe ceiling</span><b>950 kW</b></div>
+          <div><span>Headroom</span><b id="gHead">—</b></div>
+          <div><span>OpenADR cap</span><b id="gAdr">none</b></div>
+        </div>
+      </div>
+    </div>
+
+    <h3 class="sub-h reveal">Charging bays (OCPP via AWS IoT Core · mTLS)</h3>
+    <div id="bays" class="bays"></div>
+
+    <div class="dash-grid two">
+      <div class="card">
+        <div class="card-head"><h3>Step Functions: load-decision workflow</h3><span class="muted small" id="wfStatus">idle · runs on every cycle</span></div>
+        <ol class="pipeline" id="pipeline">
+          <li data-step="0"><span class="svc">API Gateway</span><span>Receive OpenADR event over HTTPS</span><em></em></li>
+          <li data-step="1"><span class="svc">Lambda</span><span>Parse and translate OpenADR → OCPP</span><em></em></li>
+          <li data-step="2"><span class="svc">Timestream</span><span>Read live transformer load</span><em></em></li>
+          <li data-step="3"><span class="svc">DynamoDB</span><span>Read charger status &amp; SoC</span><em></em></li>
+          <li data-step="4"><span class="svc">Lambda</span><span>Compute fair per-session limits</span><em></em></li>
+          <li data-step="5"><span class="svc">DynamoDB</span><span>Write updated charger state</span><em></em></li>
+          <li data-step="6"><span class="svc">IoT Core</span><span>Push SetChargingProfile (OCPP)</span><em></em></li>
+        </ol>
+        <div class="wf-total">End-to-end: <b id="wfTotal">—</b></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h3>SageMaker 24-hour demand forecast</h3><span class="muted small">pre-emptive allocation</span></div>
+        <canvas id="fcChart" height="200"></canvas>
+        <p class="note" id="fcNote">Forecast peak at 18:00. Allocation tightens 30 minutes ahead.</p>
+      </div>
+    </div>
+
+    <div class="card log-card">
+      <div class="card-head"><h3>Event log · Kinesis Data Streams</h3><span class="muted small"><span class="dot live"></span> streaming</span></div>
+      <div id="log" class="log" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <!-- PROBLEM -->
+  <section id="problem" class="section">
+    <div class="section-head reveal">
+      <h2>The problem: four pillars</h2>
+      <p>There is usually enough power on the grid. What goes wrong is timing and coordination: dozens of chargers switch on independently, and none of them can see how much headroom the local transformer has left.</p>
+    </div>
+    <div class="pillars">
+      <article class="card pillar reveal"><span class="p-num">01</span><h3>Protocol disconnect</h3><p>Utilities speak OpenADR and chargers speak OCPP. Nothing bridges them natively, so every site relies on one-off glue code.</p></article>
+      <article class="card pillar reveal"><span class="p-num">02</span><h3>Latency at scale</h3><p>Traditional backends queue up when 50 chargers report at once and take 15–30 s to respond. Protection relays trip much faster than that.</p></article>
+      <article class="card pillar reveal"><span class="p-num">03</span><h3>Static allocation</h3><p>Each charger's power ceiling is fixed at install time. It ignores the time of day, the grid state and each car's state of charge.</p></article>
+      <article class="card pillar reveal"><span class="p-num">04</span><h3>Vulnerable edge</h3><p>Chargers sit outdoors on public cellular links, often with password authentication. A compromised charger can become a way into grid signalling.</p></article>
+    </div>
+
+    <div class="objectives reveal">
+      <h3>Objectives</h3>
+      <ul>
+        <li><b>&lt; 2 s</b> system reaction time during grid stress</li>
+        <li><b>≥ 35%</b> reduction in utility peak demand charges</li>
+        <li><b>&lt; 100%</b> transformer load, zero tripping events</li>
+        <li><b>99.99%</b> cloud uptime (≈ 52 min/year downtime)</li>
+        <li><b>Zero-trust</b> end-to-end hardware security</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ARCHITECTURE -->
+  <section id="architecture" class="section">
+    <div class="section-head reveal">
+      <h2>Proposed AWS architecture</h2>
+      <p>Click any service to see its role. Animated lines show the decision loop: <span class="tag down">commands flow down</span> and <span class="tag up">telemetry flows up</span>.</p>
+    </div>
+    <div class="arch-wrap card reveal">
+      <svg id="arch" viewBox="0 0 900 520" class="arch" role="img" aria-label="AWS architecture diagram">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 10 5 0 10z" class="ah"/></marker>
+        </defs>
+        <!-- flows -->
+        <path class="flow down" d="M150 70 V120" marker-end="url(#ah)"/>
+        <path class="flow down" d="M150 170 V215" marker-end="url(#ah)"/>
+        <path class="flow down" d="M240 240 H325" marker-end="url(#ah)"/>
+        <path class="flow down" d="M450 290 V355" marker-end="url(#ah)"/>
+        <path class="flow down" d="M450 405 L180 455" marker-end="url(#ah)"/>
+        <path class="flow down" d="M450 405 V455" marker-end="url(#ah)"/>
+        <path class="flow down" d="M450 405 L720 455" marker-end="url(#ah)"/>
+        <path class="flow up" d="M770 470 Q840 420 780 360" marker-end="url(#ah)"/>
+        <path class="flow up" d="M760 310 V255" marker-end="url(#ah)"/>
+        <path class="flow up" d="M680 230 H580" marker-end="url(#ah)"/>
+        <path class="flow up" d="M760 205 V150" marker-end="url(#ah)"/>
+        <path class="flow side" d="M680 125 Q520 90 470 185" marker-end="url(#ah)"/>
+        <path class="flow side" d="M330 300 Q260 330 240 360" marker-end="url(#ah)" />
+        <!-- nodes -->
+        <g class="node ext" data-k="utility"><rect x="60" y="20" width="180" height="50" rx="12"/><text x="150" y="50">⚡ Utility (OpenADR)</text></g>
+        <g class="node" data-k="apigw"><rect x="60" y="120" width="180" height="50" rx="12"/><text x="150" y="150">API Gateway</text></g>
+        <g class="node" data-k="lambda"><rect x="60" y="215" width="180" height="50" rx="12"/><text x="150" y="245">Lambda · translate</text></g>
+        <g class="node big" data-k="sfn"><rect x="325" y="185" width="255" height="105" rx="14"/><text x="452" y="225">Step Functions</text><text x="452" y="250" class="t-sub">read → compute → write</text><text x="452" y="270" class="t-sub">Lambda allocation engine</text></g>
+        <g class="node" data-k="ddb"><rect x="150" y="360" width="180" height="50" rx="12"/><text x="240" y="390">DynamoDB</text></g>
+        <g class="node" data-k="iot"><rect x="360" y="355" width="180" height="50" rx="12"/><text x="450" y="385">AWS IoT Core</text></g>
+        <g class="node" data-k="ts"><rect x="680" y="205" width="170" height="50" rx="12"/><text x="765" y="235">Timestream</text></g>
+        <g class="node" data-k="kinesis"><rect x="680" y="310" width="170" height="50" rx="12"/><text x="765" y="340">Kinesis Streams</text></g>
+        <g class="node" data-k="sm"><rect x="680" y="100" width="170" height="50" rx="12"/><text x="765" y="130">SageMaker</text></g>
+        <g class="node ext" data-k="charger"><rect x="90" y="455" width="180" height="45" rx="12"/><text x="180" y="482">🔌 Charger 1</text></g>
+        <g class="node ext" data-k="charger"><rect x="360" y="455" width="180" height="45" rx="12"/><text x="450" y="482">🔌 Charger 2</text></g>
+        <g class="node ext" data-k="charger"><rect x="630" y="455" width="180" height="45" rx="12"/><text x="720" y="482">🔌 Charger N</text></g>
+        <circle class="packet" r="6"><animateMotion dur="3.2s" repeatCount="indefinite" path="M150 45 V240 H450 V380 L720 478"/></circle>
+        <circle class="packet up" r="6"><animateMotion dur="3.6s" repeatCount="indefinite" path="M720 478 Q840 420 765 335 V230 H500"/></circle>
+      </svg>
+      <aside id="archInfo" class="arch-info">
+        <h3>Select a service</h3>
+        <p>Every service here addresses a specific challenge from the report. Click a box in the diagram.</p>
+      </aside>
+    </div>
+
+    <div class="flow-steps reveal">
+      <div class="fs"><b>1</b><p>The utility detects substation stress and sends an OpenADR signal to API Gateway.</p></div>
+      <div class="fs"><b>2</b><p>Lambda works out which site and chargers are affected and translates the event.</p></div>
+      <div class="fs"><b>3</b><p>Step Functions reads Timestream and DynamoDB, then computes a fair new limit for each session.</p></div>
+      <div class="fs"><b>4</b><p>IoT Core pushes OCPP commands to the chargers, all within 2 seconds.</p></div>
+      <div class="fs"><b>5</b><p>Meter data streams through Kinesis into Timestream, and SageMaker learns the peaks.</p></div>
+    </div>
+  </section>
+
+  <!-- RESEARCH -->
+  <section id="research" class="section">
+    <div class="section-head reveal">
+      <h2>Literature survey · 2020 → 2026</h2>
+      <p>The field moved from the cloud as an <b>observer</b> to the cloud as a <b>decision-maker</b>. None of the 10 papers combine protocol translation, sub-2 s control, dynamic allocation and zero-trust security, and that gap is what this project addresses.</p>
+    </div>
+    <div class="timeline" id="timeline"></div>
+  </section>
+
+  <!-- SECURITY & COST -->
+  <section id="security" class="section">
+    <div class="section-head reveal"><h2>Security &amp; cost</h2></div>
+    <div class="sec-grid">
+      <div class="card reveal"><h3>🔐 Mutual TLS (X.509)</h3><p>The charger and IoT Core verify each other's certificates. There is no shared secret to leak, and any single device can be revoked on its own.</p></div>
+      <div class="card reveal"><h3>🗝️ AWS KMS encryption</h3><p>Timestream, DynamoDB and S3 backups are encrypted at rest, and KMS rotates the keys automatically.</p></div>
+      <div class="card reveal"><h3>🛡️ Private VPC</h3><p>Lambda, Step Functions and the databases are not exposed to the internet. Only API Gateway and IoT Core face outward.</p></div>
+      <div class="card reveal"><h3>💸 Serverless pay-per-use</h3><p>Lambda, API Gateway, Step Functions, Kinesis and on-demand DynamoDB cost almost nothing when idle overnight.</p></div>
+      <div class="card reveal"><h3>🧊 S3 tiering</h3><p>Telemetry older than 90 days moves from hot Timestream to S3 Infrequent Access or Glacier.</p></div>
+      <div class="card reveal"><h3>📉 Fargate Savings Plans</h3><p>Predictable workloads such as scheduled SageMaker retraining run at a lower committed rate.</p></div>
+    </div>
+
+    <div class="card cost reveal">
+      <div class="card-head"><h3>Cost estimator (illustrative)</h3><span class="muted small">serverless scales with chargers, not with peak capacity</span></div>
+      <label class="cost-row">Number of chargers: <b id="cN">500</b>
+        <input id="costRange" type="range" min="10" max="5000" step="10" value="500">
+      </label>
+      <div class="cost-bars">
+        <div><span>Always-on servers sized for peak</span><div class="cbar"><i id="cbFixed"></i></div><b id="cFixed">—</b></div>
+        <div><span>GridSync serverless</span><div class="cbar"><i id="cbSl" class="sl"></i></div><b id="cSl">—</b></div>
+      </div>
+      <p class="note">Illustrative monthly figures based on a simple per-charger message-volume model. They are not an official AWS quote.</p>
+    </div>
+  </section>
+
+  <section class="section novelty reveal">
+    <h2>What's novel</h2>
+    <div class="nov">
+      <div><b>Live power limits</b><p>Each charger's limit is recalculated continuously instead of being set once at install.</p></div>
+      <div><b>OpenADR ⇄ OCPP bridge</b><p>Grid stress becomes a reduced charger draw in under 2 s.</p></div>
+      <div><b>Fully serverless</b><p>Scales from one site to thousands of chargers with no servers to provision.</p></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <p><b>GridSync</b> · AWS Cloud Infrastructure for Smart EV Fast-Charging and Power Grid Management · Team 4</p>
+  <p class="muted">Anish P (24BCE2394) · Neeraj K (24BCE2393) · Dashboard data is simulated for demonstration.</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
