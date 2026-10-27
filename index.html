@@ -18,6 +18,7 @@
   <a class="brand" href="#top"><span class="bolt">⚡</span> GridSync<span class="muted">/AWS</span></a>
   <nav>
     <a href="#dashboard">Dashboard</a>
+    <a href="#ai">AI Lab</a>
     <a href="#problem">Problem</a>
     <a href="#architecture">Architecture</a>
     <a href="#research">Research</a>
@@ -29,12 +30,12 @@
   <!-- HERO -->
   <section class="hero">
     <div class="hero-text reveal">
-      <span class="pill"><span class="dot live"></span> Team 4 · Cloud Architecture Design</span>
-      <h1>AWS cloud infrastructure for <span class="grad">smart EV fast-charging</span> &amp; power grid management</h1>
-      <p class="lead">Ten 150–350 kW chargers ramping up at 6 PM can trip a feeder that was never built for that peak. GridSync connects utility <b>OpenADR</b> signals to charger <b>OCPP</b> commands over a serverless AWS pipeline and pushes new power limits in <b>under 2 seconds</b>, before the protection relays trip.</p>
+      <span class="pill"><span class="dot live"></span> Team 4 · Cloud Architecture Design · AI/ML</span>
+      <h1>AI-driven AWS cloud for <span class="grad">smart EV fast-charging</span> &amp; power grid management</h1>
+      <p class="lead">Ten 150–350 kW chargers ramping up at 6 PM can trip a feeder that was never built for that peak. GridSync bridges utility <b>OpenADR</b> and charger <b>OCPP</b> on serverless AWS, and makes every decision with three machine-learning models trained live in your browser: a <b>neural-network demand forecaster</b>, a <b>reinforcement-learning charging agent</b> and an <b>Isolation Forest intrusion detector</b>. New limits reach the chargers in <b>under 2 seconds</b>, before the protection relays trip.</p>
       <div class="cta">
         <a class="btn primary" href="#dashboard">Open live dashboard →</a>
-        <a class="btn ghost" href="#architecture">See the architecture</a>
+        <a class="btn ghost" href="#ai">Watch the AI train</a>
       </div>
       <p class="authors">Anish P · 24BCE2394 &nbsp;|&nbsp; Neeraj K · 24BCE2393</p>
     </div>
@@ -50,16 +51,18 @@
   <section id="dashboard" class="section">
     <div class="section-head reveal">
       <h2>Live grid control dashboard</h2>
-      <p>A simulated fast-charging hub on one 1 MW distribution transformer. Switch between a <b>static</b> fixed-limit setup and <b>GridSync</b> AWS control to watch the difference, then send a utility OpenADR event.</p>
+      <p>A simulated fast-charging hub on one 1 MW distribution transformer. Compare three controllers on the same grid: <b>static</b> limits (legacy), AWS <b>cloud rules</b> (no ML) and <b>GridSync AI</b>. Then send a utility OpenADR event or launch a cyber attack on a charger.</p>
     </div>
 
     <div class="controls reveal">
       <div class="seg" role="group" aria-label="Control mode">
-        <button class="seg-btn" data-mode="static">Static limits (baseline)</button>
-        <button class="seg-btn active" data-mode="smart">GridSync AWS control</button>
+        <button class="seg-btn" data-mode="static">Static limits</button>
+        <button class="seg-btn" data-mode="rules">Cloud rules</button>
+        <button class="seg-btn active" data-mode="ai">🧠 GridSync AI</button>
       </div>
       <button id="adrBtn" class="btn warn">⚠ Send OpenADR event: −30% load</button>
-      <button id="rushBtn" class="btn ghost">🚗 Evening rush (plug in all)</button>
+      <button id="rushBtn" class="btn ghost">🚗 Evening rush</button>
+      <button id="attackBtn" class="btn danger">☠ Simulate cyber attack</button>
       <label class="speed">Sim speed
         <input id="speed" type="range" min="1" max="20" value="6">
       </label>
@@ -73,7 +76,7 @@
       <div class="kpi card"><span class="k-label">Last reaction time</span><span class="k-val" id="kReact">—</span><span class="k-sub">target &lt; 2.00 s</span></div>
       <div class="kpi card"><span class="k-label">Peak demand saved</span><span class="k-val" id="kSaved">0%</span><span class="k-sub" id="kPeak">peak 0 kW vs 0 kW</span></div>
       <div class="kpi card"><span class="k-label">Tripping events</span><span class="k-val" id="kTrips">0</span><span class="k-sub" id="kTripSub">feeder healthy</span></div>
-      <div class="kpi card"><span class="k-label">IoT Core uptime</span><span class="k-val" id="kUp">99.99%</span><span class="k-sub" id="kConn">8 / 8 chargers connected</span></div>
+      <div class="kpi card"><span class="k-label">Threats blocked (AI)</span><span class="k-val" id="kThreat">0</span><span class="k-sub" id="kScored">0 messages scored by AI</span></div>
     </div>
 
     <div class="dash-grid">
@@ -114,23 +117,87 @@
           <li data-step="1"><span class="svc">Lambda</span><span>Parse and translate OpenADR → OCPP</span><em></em></li>
           <li data-step="2"><span class="svc">Timestream</span><span>Read live transformer load</span><em></em></li>
           <li data-step="3"><span class="svc">DynamoDB</span><span>Read charger status &amp; SoC</span><em></em></li>
-          <li data-step="4"><span class="svc">Lambda</span><span>Compute fair per-session limits</span><em></em></li>
-          <li data-step="5"><span class="svc">DynamoDB</span><span>Write updated charger state</span><em></em></li>
-          <li data-step="6"><span class="svc">IoT Core</span><span>Push SetChargingProfile (OCPP)</span><em></em></li>
+          <li data-step="4" class="ai-step"><span class="svc">SageMaker</span><span>🧠 Forecast + RL policy inference</span><em></em></li>
+          <li data-step="5"><span class="svc">Lambda</span><span>Compute fair per-session limits</span><em></em></li>
+          <li data-step="6"><span class="svc">DynamoDB</span><span>Write updated charger state</span><em></em></li>
+          <li data-step="7"><span class="svc">IoT Core</span><span>Push SetChargingProfile (OCPP)</span><em></em></li>
         </ol>
         <div class="wf-total">End-to-end: <b id="wfTotal">—</b></div>
       </div>
 
       <div class="card">
-        <div class="card-head"><h3>SageMaker 24-hour demand forecast</h3><span class="muted small">pre-emptive allocation</span></div>
+        <div class="card-head"><h3>Neural-network demand forecast · today</h3>
+          <div class="legend"><span><i class="sw ev"></i>Actual</span><span><i class="sw fc"></i>MLP prediction</span></div></div>
         <canvas id="fcChart" height="200"></canvas>
-        <p class="note" id="fcNote">Forecast peak at 18:00. Allocation tightens 30 minutes ahead.</p>
+        <p class="note" id="fcNote">Training the forecaster…</p>
+      </div>
+    </div>
+
+    <div class="dash-grid two">
+      <div class="card">
+        <div class="card-head"><h3>🧠 Explainable AI: why this decision?</h3><span class="muted small">updates every control cycle</span></div>
+        <div id="xai"><p class="muted">Training models…</p></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>🛡 AI intrusion detection (Isolation Forest)</h3><span class="muted small">per-message anomaly score</span></div>
+        <div id="guardBars" class="guard"></div>
+        <p class="note">Each bar is the anomaly score of that charger's latest Kinesis message. The dashed marker is the learned threshold. Two flagged messages out of three revoke the charger's certificate in IoT Core.</p>
       </div>
     </div>
 
     <div class="card log-card">
       <div class="card-head"><h3>Event log · Kinesis Data Streams</h3><span class="muted small"><span class="dot live"></span> streaming</span></div>
       <div id="log" class="log" aria-live="polite"></div>
+    </div>
+  </section>
+
+
+  <!-- AI LAB -->
+  <section id="ai" class="section">
+    <div class="section-head reveal">
+      <h2>AI Lab: three models, trained live</h2>
+      <p>Every model below is trained from scratch in your browser when the page loads, with no libraries and no pre-baked numbers. In production the same jobs run on <b>Amazon SageMaker</b> every night using Timestream history. All metrics are measured on held-out data the model never saw.</p>
+    </div>
+    <div class="lab-bar reveal">
+      <span id="labStatus" class="lab-status run">Starting training…</span>
+      <button id="retrainBtn" class="btn ghost small">↻ Retrain all models</button>
+    </div>
+
+    <div class="lab-grid">
+      <article class="card lab reveal">
+        <span class="lab-tag">Model 1 · Supervised learning</span>
+        <h3>Demand forecaster: neural network (MLP 7→16→12→1)</h3>
+        <p class="muted small">Predicts next-hour site demand from time of day, weekday, temperature and recent load. Trained with backpropagation and the Adam optimiser on 100 days, tested on 20 unseen days.</p>
+        <div class="legend"><span><i class="sw ev"></i>Train RMSE</span><span><i class="sw cy"></i>Test MAE</span></div>
+        <canvas id="fcLoss" height="150"></canvas>
+        <p class="mono small" id="fcEpoch">waiting…</p>
+        <div class="metrics" id="fcMetrics"></div>
+        <div class="legend"><span><i class="sw ev"></i>Actual</span><span><i class="sw fc"></i>Predicted</span></div>
+        <canvas id="fcTest" height="130"></canvas>
+      </article>
+
+      <article class="card lab reveal">
+        <span class="lab-tag">Model 2 · Reinforcement learning</span>
+        <h3>Charging agent: Q-learning controller</h3>
+        <p class="muted small">Learns what share of transformer headroom to give EVs, from 6,000 simulated days. The reward is energy delivered, minus penalties for overloads, new demand peaks and waiting customers. The forecaster's predicted trend is part of its state.</p>
+        <canvas id="rlCurve" height="150"></canvas>
+        <p class="mono small" id="rlEp">waiting…</p>
+        <div class="table-wrap"><table id="rlTable" class="rl-table"></table></div>
+        <p class="note" id="rlSummary"></p>
+        <h4>Learned policy: % of headroom given to EVs</h4>
+        <p class="muted small">Most common situation for each time of day and neighbourhood load. A dot means the agent never saw that combination.</p>
+        <div id="policyGrid" class="policy-grid"></div>
+      </article>
+
+      <article class="card lab reveal">
+        <span class="lab-tag">Model 3 · Unsupervised learning</span>
+        <h3>Telemetry guard: Isolation Forest IDS</h3>
+        <p class="muted small">150 random isolation trees fitted on an <b>unlabelled</b> slice of the charger message stream. Physics-informed features: voltage deviation, the P − V·I residual, compliance with the commanded limit, message cadence and power level.</p>
+        <div class="legend"><span><i class="sw ok"></i>Normal messages</span><span><i class="sw bad"></i>Attack messages</span></div>
+        <canvas id="idsHist" height="150"></canvas>
+        <div class="metrics" id="idsMetrics"></div>
+        <p class="note">Limit-bypass attacks are hardest to catch, because a charger whose limit is already near its rating looks normal. That is why the guard needs 2 of 3 flagged messages before it revokes a certificate.</p>
+      </article>
     </div>
   </section>
 
@@ -192,8 +259,8 @@
         <g class="node" data-k="ddb"><rect x="150" y="360" width="180" height="50" rx="12"/><text x="240" y="390">DynamoDB</text></g>
         <g class="node" data-k="iot"><rect x="360" y="355" width="180" height="50" rx="12"/><text x="450" y="385">AWS IoT Core</text></g>
         <g class="node" data-k="ts"><rect x="680" y="205" width="170" height="50" rx="12"/><text x="765" y="235">Timestream</text></g>
-        <g class="node" data-k="kinesis"><rect x="680" y="310" width="170" height="50" rx="12"/><text x="765" y="340">Kinesis Streams</text></g>
-        <g class="node" data-k="sm"><rect x="680" y="100" width="170" height="50" rx="12"/><text x="765" y="130">SageMaker</text></g>
+        <g class="node" data-k="kinesis"><rect x="680" y="310" width="170" height="50" rx="12"/><text x="765" y="340">Kinesis + AI guard</text></g>
+        <g class="node" data-k="sm"><rect x="680" y="100" width="170" height="50" rx="12"/><text x="765" y="130">SageMaker · 3 models</text></g>
         <g class="node ext" data-k="charger"><rect x="90" y="455" width="180" height="45" rx="12"/><text x="180" y="482">🔌 Charger 1</text></g>
         <g class="node ext" data-k="charger"><rect x="360" y="455" width="180" height="45" rx="12"/><text x="450" y="482">🔌 Charger 2</text></g>
         <g class="node ext" data-k="charger"><rect x="630" y="455" width="180" height="45" rx="12"/><text x="720" y="482">🔌 Charger N</text></g>
@@ -251,19 +318,23 @@
 
   <section class="section novelty reveal">
     <h2>What's novel</h2>
+    <p class="muted nov-lead">The literature splits into cloud forecasting that cannot act in real time, edge AI that is hard to audit, and security treated as a separate topic. GridSync joins all three into one closed, explainable loop on serverless AWS.</p>
     <div class="nov">
-      <div><b>Live power limits</b><p>Each charger's limit is recalculated continuously instead of being set once at install.</p></div>
-      <div><b>OpenADR ⇄ OCPP bridge</b><p>Grid stress becomes a reduced charger draw in under 2 s.</p></div>
-      <div><b>Fully serverless</b><p>Scales from one site to thousands of chargers with no servers to provision.</p></div>
+      <div><span class="nov-n">01</span><b>Forecast-informed RL control</b><p>A neural-network forecast feeds a reinforcement-learning agent that learns how much safety margin to keep. On 30 unseen days it cut overloads by about 99% against a fixed cloud rule, instead of relying on a hand-tuned limit.</p></div>
+      <div><span class="nov-n">02</span><b>Security that acts on the grid</b><p>A physics-informed Isolation Forest scores every OCPP message. A flagged charger has its IoT Core certificate revoked automatically and its power is reallocated in the same control cycle, so the security and grid-control loops are joined.</p></div>
+      <div><span class="nov-n">03</span><b>Explainable decisions</b><p>Every AI action comes with Q-values and forecast feature attributions in plain language. This addresses the auditability gap the 2026 edge-agent papers leave open.</p></div>
+      <div><span class="nov-n">04</span><b>OpenADR ⇄ OCPP in under 2 s, serverless</b><p>Utility signals become charger limits in under 2 seconds. The design scales from one site to thousands of chargers with no servers to manage.</p></div>
     </div>
   </section>
 </main>
 
 <footer class="foot">
   <p><b>GridSync</b> · AWS Cloud Infrastructure for Smart EV Fast-Charging and Power Grid Management · Team 4</p>
-  <p class="muted">Anish P (24BCE2394) · Neeraj K (24BCE2393) · Dashboard data is simulated for demonstration.</p>
+  <p class="muted">Anish P (24BCE2394) · Neeraj K (24BCE2393) · Grid data is simulated; all ML models are real and trained in the browser.</p>
 </footer>
 
+<script src="ml.js"></script>
+<script src="ai.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
