@@ -17,6 +17,7 @@
 <header class="nav">
   <a class="brand" href="#top"><span class="bolt">⚡</span> GridSync<span class="muted">/AWS</span></a>
   <nav>
+    <a href="#aws">Live AWS</a>
     <a href="#dashboard">Dashboard</a>
     <a href="#ai">AI Lab</a>
     <a href="#problem">Problem</a>
@@ -34,7 +35,8 @@
       <h1>AI-driven AWS cloud for <span class="grad">smart EV fast-charging</span> &amp; power grid management</h1>
       <p class="lead">Ten 150–350 kW chargers ramping up at 6 PM can trip a feeder that was never built for that peak. GridSync bridges utility <b>OpenADR</b> and charger <b>OCPP</b> on serverless AWS, and makes every decision with three machine-learning models trained live in your browser: a <b>neural-network demand forecaster</b>, a <b>reinforcement-learning charging agent</b> and an <b>Isolation Forest intrusion detector</b>. New limits reach the chargers in <b>under 2 seconds</b>, before the protection relays trip.</p>
       <div class="cta">
-        <a class="btn primary" href="#dashboard">Open live dashboard →</a>
+        <a class="btn primary" href="#aws">☁ Live on AWS →</a>
+        <a class="btn ghost" href="#dashboard">Simulation dashboard</a>
         <a class="btn ghost" href="#ai">Watch the AI train</a>
       </div>
       <p class="authors">Anish P · 24BCE2394 &nbsp;|&nbsp; Neeraj K · 24BCE2393</p>
@@ -44,6 +46,53 @@
       <div class="stat"><span class="num" data-count="35" data-suffix="%">0</span><span>cut in utility peak demand charges</span></div>
       <div class="stat"><span class="num" data-count="99.99" data-decimals="2" data-suffix="%">0</span><span>cloud uptime for charger connections</span></div>
       <div class="stat"><span class="num" data-count="0">0</span><span>transformer tripping events</span></div>
+    </div>
+  </section>
+
+  <!-- LIVE AWS -->
+  <section id="aws" class="section">
+    <div class="section-head reveal">
+      <h2>☁ Live on AWS: control room</h2>
+      <p>Real infrastructure, not a simulation in the browser. Eight chargers and a transformer meter connect to <b>AWS IoT Core</b> with their own X.509 certificates. Telemetry flows through an <b>IoT Rule → SQS → Lambda</b> AI guard into <b>DynamoDB</b>, and every few seconds an <b>Express Step Functions</b> workflow runs the trained models and publishes OCPP limits back through IoT Core. Region <b id="awsRegion">—</b> · API <code id="awsApi">—</code></p>
+    </div>
+    <div class="lab-bar reveal"><span id="awsConn" class="lab-status run">Connecting to AWS…</span></div>
+
+    <div class="controls reveal">
+      <div class="seg" role="group" aria-label="AWS control mode">
+        <button class="seg-btn" data-aws-mode="rules">Cloud rules</button>
+        <button class="seg-btn active" data-aws-mode="ai">🧠 GridSync AI</button>
+      </div>
+      <button id="awsAdrBtn" class="btn warn">⚠ POST /openadr −30%</button>
+      <button id="awsRushBtn" class="btn ghost">🚗 Evening rush</button>
+      <button id="awsAttackBtn" class="btn danger">☠ Cyber attack</button>
+      <button id="awsRestoreBtn" class="btn ghost small">↺ Restore certificates</button>
+    </div>
+    <p id="awsResult" class="aws-result muted">Buttons call the real API Gateway endpoints.</p>
+
+    <div class="kpis">
+      <div class="kpi card"><span class="k-label">Transformer load (IoT meter)</span><span class="k-val" id="awsLoad">—</span><span class="k-sub" id="awsLoadSub"></span></div>
+      <div class="kpi card"><span class="k-label">Site time</span><span class="k-val" id="awsClock">—</span><span class="k-sub" id="awsDemand"></span></div>
+      <div class="kpi card"><span class="k-label">Step Functions run</span><span class="k-val" id="awsExec">—</span><span class="k-sub" id="awsExecSub"></span></div>
+      <div class="kpi card"><span class="k-label">Mode</span><span class="k-val" id="awsMode">—</span><span class="k-sub" id="awsAdr"></span></div>
+      <div class="kpi card"><span class="k-label">Certificates revoked</span><span class="k-val" id="awsThreats">0</span><span class="k-sub">by the Lambda AI guard</span></div>
+      <div class="kpi card"><span class="k-label">Data source</span><span class="k-val small-val">DynamoDB</span><span class="k-sub">polled every 2 s via API Gateway</span></div>
+    </div>
+
+    <div class="dash-grid">
+      <div class="card"><div class="card-head"><h3>Transformer load from DynamoDB time series</h3>
+        <div class="legend"><span><i class="sw base"></i>Neighbourhood</span><span><i class="sw ev"></i>EV charging</span><span><i class="sw cap"></i>Rated</span></div></div>
+        <canvas id="awsChart" height="240"></canvas></div>
+      <div class="card"><div class="card-head"><h3>Last Step Functions execution</h3><span class="muted small">gridsync-control (EXPRESS)</span></div>
+        <ol class="pipeline" id="awsSteps"></ol>
+        <div class="why" id="awsWhy"></div></div>
+    </div>
+
+    <h3 class="sub-h">IoT things (live from the gridsync-charger-state table)</h3>
+    <div id="awsBays" class="bays"></div>
+
+    <div class="card log-card">
+      <div class="card-head"><h3>Cloud event log (DynamoDB)</h3><span class="muted small"><span class="dot live"></span> written by Lambda</span></div>
+      <div id="awsLog" class="log"></div>
     </div>
   </section>
 
@@ -336,5 +385,6 @@
 <script src="ml.js"></script>
 <script src="ai.js"></script>
 <script src="app.js"></script>
+<script src="aws-live.js"></script>
 </body>
 </html>

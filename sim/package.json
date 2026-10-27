@@ -1,0 +1,9 @@
+{
+  "name": "gridsync-charger-simulator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "8 EV fast chargers + transformer meter connected to AWS IoT Core over mutual TLS",
+  "main": "charger-sim.js",
+  "scripts": { "start": "node charger-sim.js" },
+  "dependencies": { "mqtt": "5.10.1" }
+}

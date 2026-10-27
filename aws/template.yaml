@@ -1,0 +1,434 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  GridSync - AI-driven serverless AWS platform for smart EV fast-charging and power grid management.
+  IoT Core (mTLS) -> IoT Rule -> SQS -> Lambda AI guard -> Step Functions (MLP forecast + RL policy) -> IoT Core OCPP commands,
+  OpenADR endpoint on API Gateway, live dashboard on S3 + CloudFront.
+
+Parameters:
+  ArtifactBucket:
+    Type: String
+    Description: S3 bucket that holds the Lambda deployment package
+  CodeKey:
+    Type: String
+    Description: S3 key of the Lambda zip
+  IotDataEndpoint:
+    Type: String
+    Description: Account-specific IoT Core data endpoint (aws iot describe-endpoint --endpoint-type iot:Data-ATS)
+  BudgetEmail:
+    Type: String
+    Description: Email address for the monthly budget alert
+
+Resources:
+  # ---------------------------------------------------------------- data
+  ChargerStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: gridsync-charger-state
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions: [{ AttributeName: deviceId, AttributeType: S }]
+      KeySchema: [{ AttributeName: deviceId, KeyType: HASH }]
+
+  SiteTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: gridsync-site
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - { AttributeName: pk, AttributeType: S }
+        - { AttributeName: sk, AttributeType: S }
+      KeySchema:
+        - { AttributeName: pk, KeyType: HASH }
+        - { AttributeName: sk, KeyType: RANGE }
+      TimeToLiveSpecification: { AttributeName: ttl, Enabled: true }
+
+  # Telemetry buffer. The report's design uses Kinesis Data Streams; this account's
+  # organization policy denies Kinesis, so SQS provides the same batched stream into Lambda.
+  TelemetryQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: gridsync-telemetry
+      VisibilityTimeout: 90
+      MessageRetentionPeriod: 3600
+
+  # ---------------------------------------------------------------- IoT Core
+  ChargerPolicy:
+    Type: AWS::IoT::Policy
+    Properties:
+      PolicyName: gridsync-device-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: iot:Connect
+            Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:client/${!iot:Connection.Thing.ThingName}"
+            Condition: { Bool: { "iot:Connection.Thing.IsAttached": "true" } }
+          - Effect: Allow
+            Action: iot:Publish
+            Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/gridsync/${!iot:Connection.Thing.ThingName}/telemetry"
+          - Effect: Allow
+            Action: iot:Subscribe
+            Resource:
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/gridsync/${!iot:Connection.Thing.ThingName}/cmd"
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topicfilter/gridsync/sim/demo"
+          - Effect: Allow
+            Action: iot:Receive
+            Resource:
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/gridsync/${!iot:Connection.Thing.ThingName}/cmd"
+              - !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/gridsync/sim/demo"
+
+  IotToQueueRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: iot.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: send-sqs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: [{ Effect: Allow, Action: sqs:SendMessage, Resource: !GetAtt TelemetryQueue.Arn }]
+
+  TelemetryRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: gridsync_telemetry_to_queue
+      TopicRulePayload:
+        AwsIotSqlVersion: "2016-03-23"
+        RuleDisabled: false
+        Sql: "SELECT *, topic(2) AS deviceId FROM 'gridsync/+/telemetry'"
+        Actions:
+          - Sqs:
+              QueueUrl: !Ref TelemetryQueue
+              RoleArn: !GetAtt IotToQueueRole.Arn
+              UseBase64: false
+
+  # ---------------------------------------------------------------- Lambda
+  LambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: lambda.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaSQSQueueExecutionRole
+      Policies:
+        - PolicyName: gridsync-lambda
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: [dynamodb:GetItem, dynamodb:PutItem, dynamodb:UpdateItem, dynamodb:Query, dynamodb:Scan]
+                Resource: [!GetAtt ChargerStateTable.Arn, !GetAtt SiteTable.Arn]
+              - Effect: Allow
+                Action: iot:Publish
+                Resource: !Sub "arn:aws:iot:${AWS::Region}:${AWS::AccountId}:topic/gridsync/*"
+              - Effect: Allow
+                Action: [iot:ListThingPrincipals, iot:UpdateCertificate, iot:AttachPolicy, iot:DetachPolicy]
+                Resource: "*"
+              - Effect: Allow
+                Action: [states:StartExecution, states:StartSyncExecution]
+                Resource: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:gridsync-control"
+
+  GuardFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: gridsync-telemetry-guard
+      Description: Telemetry consumer - Isolation Forest scoring, certificate revocation, control trigger
+      Runtime: nodejs22.x
+      Handler: guard.handler
+      Role: !GetAtt LambdaRole.Arn
+      MemorySize: 512
+      Timeout: 30
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !Ref CodeKey }
+      Environment:
+        Variables:
+          CHARGER_TABLE: !Ref ChargerStateTable
+          SITE_TABLE: !Ref SiteTable
+          IOT_ENDPOINT: !Ref IotDataEndpoint
+          STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:gridsync-control"
+
+  GuardQueueMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      FunctionName: !Ref GuardFunction
+      EventSourceArn: !GetAtt TelemetryQueue.Arn
+      BatchSize: 100
+      MaximumBatchingWindowInSeconds: 1
+      ScalingConfig: { MaximumConcurrency: 2 }
+
+  ControlFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: gridsync-control-steps
+      Description: Step Functions tasks - read load, AI inference (MLP + RL), allocate, write, publish OCPP
+      Runtime: nodejs22.x
+      Handler: control.handler
+      Role: !GetAtt LambdaRole.Arn
+      MemorySize: 1024
+      Timeout: 15
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !Ref CodeKey }
+      Environment:
+        Variables:
+          CHARGER_TABLE: !Ref ChargerStateTable
+          SITE_TABLE: !Ref SiteTable
+          IOT_ENDPOINT: !Ref IotDataEndpoint
+          STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:gridsync-control"
+
+  OpenAdrFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: gridsync-openadr
+      Description: OpenADR event endpoint - translates to a load cap and runs the control workflow synchronously
+      Runtime: nodejs22.x
+      Handler: openadr.handler
+      Role: !GetAtt LambdaRole.Arn
+      MemorySize: 512
+      Timeout: 29
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !Ref CodeKey }
+      Environment:
+        Variables:
+          CHARGER_TABLE: !Ref ChargerStateTable
+          SITE_TABLE: !Ref SiteTable
+          IOT_ENDPOINT: !Ref IotDataEndpoint
+          STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:gridsync-control"
+
+  ApiFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: gridsync-dashboard-api
+      Description: Dashboard API - live state, mode switch, demo actions, certificate restore
+      Runtime: nodejs22.x
+      Handler: api.handler
+      Role: !GetAtt LambdaRole.Arn
+      MemorySize: 512
+      Timeout: 15
+      Code: { S3Bucket: !Ref ArtifactBucket, S3Key: !Ref CodeKey }
+      Environment:
+        Variables:
+          CHARGER_TABLE: !Ref ChargerStateTable
+          SITE_TABLE: !Ref SiteTable
+          IOT_ENDPOINT: !Ref IotDataEndpoint
+          STATE_MACHINE_ARN: !Sub "arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:gridsync-control"
+
+  # ---------------------------------------------------------------- Step Functions
+  StepFunctionsRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: [{ Effect: Allow, Principal: { Service: states.amazonaws.com }, Action: sts:AssumeRole }]
+      Policies:
+        - PolicyName: invoke-control
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement: [{ Effect: Allow, Action: lambda:InvokeFunction, Resource: [!GetAtt ControlFunction.Arn, !Sub "${ControlFunction.Arn}:*"] }]
+
+  ControlStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: gridsync-control
+      StateMachineType: EXPRESS
+      RoleArn: !GetAtt StepFunctionsRole.Arn
+      DefinitionSubstitutions: { ControlArn: !GetAtt ControlFunction.Arn }
+      Definition:
+        Comment: GridSync load-decision workflow (target < 2 s end to end)
+        StartAt: ReadTransformerLoad
+        States:
+          ReadTransformerLoad:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: readTransformer, state.$: "$" } }
+            OutputPath: $.Payload
+            Retry: [{ ErrorEquals: [Lambda.ServiceException, Lambda.TooManyRequestsException], MaxAttempts: 2, IntervalSeconds: 1 }]
+            Next: ReadChargerStatus
+          ReadChargerStatus:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: readChargers, state.$: "$" } }
+            OutputPath: $.Payload
+            Next: AIInference
+          AIInference:
+            Type: Task
+            Comment: MLP demand forecast + Q-learning policy (models trained offline, SageMaker-style)
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: aiInference, state.$: "$" } }
+            OutputPath: $.Payload
+            Next: ComputeLimits
+          ComputeLimits:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: computeLimits, state.$: "$" } }
+            OutputPath: $.Payload
+            Next: WriteChargerState
+          WriteChargerState:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: writeState, state.$: "$" } }
+            OutputPath: $.Payload
+            Next: PublishOcppCommands
+          PublishOcppCommands:
+            Type: Task
+            Resource: arn:aws:states:::lambda:invoke
+            Parameters: { FunctionName: "${ControlArn}", Payload: { step: publishOcpp, state.$: "$" } }
+            OutputPath: $.Payload
+            End: true
+
+  # ---------------------------------------------------------------- API Gateway
+  HttpApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: gridsync-api
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins: ["*"]
+        AllowMethods: [GET, POST, OPTIONS]
+        AllowHeaders: [content-type]
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt ApiFunction.Arn
+      PayloadFormatVersion: "2.0"
+
+  OpenAdrIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt OpenAdrFunction.Arn
+      PayloadFormatVersion: "2.0"
+      TimeoutInMillis: 29000
+
+  StateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "GET /state", Target: !Sub "integrations/${ApiIntegration}" }
+  ModeRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "POST /mode", Target: !Sub "integrations/${ApiIntegration}" }
+  DemoRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "POST /demo", Target: !Sub "integrations/${ApiIntegration}" }
+  OpenAdrRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties: { ApiId: !Ref HttpApi, RouteKey: "POST /openadr", Target: !Sub "integrations/${OpenAdrIntegration}" }
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties: { ApiId: !Ref HttpApi, StageName: $default, AutoDeploy: true }
+
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ApiFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  OpenAdrInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OpenAdrFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*"
+
+  # ---------------------------------------------------------------- website (S3 + CloudFront)
+  WebsiteBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "gridsync-web-${AWS::AccountId}-${AWS::Region}"
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  WebsiteOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub "gridsync-oac-${AWS::AccountId}"
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  WebsiteDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Comment: GridSync dashboard
+        Enabled: true
+        DefaultRootObject: index.html
+        HttpVersion: http2
+        PriceClass: PriceClass_200
+        Origins:
+          - Id: web
+            DomainName: !GetAtt WebsiteBucket.RegionalDomainName
+            OriginAccessControlId: !Ref WebsiteOAC
+            S3OriginConfig: { OriginAccessIdentity: "" }
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # Managed-CachingDisabled (always fresh for the demo)
+          Compress: true
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebsiteBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub "${WebsiteBucket.Arn}/*"
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${WebsiteDistribution}"
+
+  # ---------------------------------------------------------------- monitoring & cost
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: GridSync
+      DashboardBody: !Sub |
+        {"widgets":[
+          {"type":"metric","x":0,"y":0,"width":12,"height":6,"properties":{"title":"IoT Core -> SQS telemetry (messages)","region":"${AWS::Region}","stat":"Sum","period":60,
+            "metrics":[["AWS/SQS","NumberOfMessagesSent","QueueName","gridsync-telemetry"],[".","NumberOfMessagesDeleted",".","."]]}},
+          {"type":"metric","x":12,"y":0,"width":12,"height":6,"properties":{"title":"Step Functions control executions","region":"${AWS::Region}","stat":"Sum","period":60,
+            "metrics":[["AWS/States","ExecutionsStarted","StateMachineArn","${ControlStateMachine}"],[".","ExecutionsSucceeded",".","."],[".","ExecutionsFailed",".","."]]}},
+          {"type":"metric","x":0,"y":6,"width":12,"height":6,"properties":{"title":"Lambda duration p90 (ms)","region":"${AWS::Region}","stat":"p90","period":60,
+            "metrics":[["AWS/Lambda","Duration","FunctionName","gridsync-telemetry-guard"],[".",".",".","gridsync-control-steps"],[".",".",".","gridsync-openadr"]]}},
+          {"type":"metric","x":12,"y":6,"width":12,"height":6,"properties":{"title":"Lambda errors","region":"${AWS::Region}","stat":"Sum","period":60,
+            "metrics":[["AWS/Lambda","Errors","FunctionName","gridsync-telemetry-guard"],[".",".",".","gridsync-control-steps"],[".",".",".","gridsync-openadr"],[".",".",".","gridsync-dashboard-api"]]}}
+        ]}
+
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: gridsync-monthly-10usd
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: 10, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref BudgetEmail }]
+
+Outputs:
+  ApiUrl:
+    Value: !GetAtt HttpApi.ApiEndpoint
+  WebsiteUrl:
+    Value: !Sub "https://${WebsiteDistribution.DomainName}"
+  WebsiteBucketName:
+    Value: !Ref WebsiteBucket
+  StateMachineArn:
+    Value: !Ref ControlStateMachine
+  CloudWatchDashboard:
+    Value: !Sub "https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=GridSync"

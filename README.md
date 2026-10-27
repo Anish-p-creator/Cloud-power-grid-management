@@ -42,7 +42,60 @@ It is a static site with no build step. Open `index.html` directly, or serve the
 python -m http.server 8000
 ```
 
-## Deploy
+## Running on AWS
+
+The `aws/` folder deploys the architecture to a real AWS account as one CloudFormation stack (`aws/template.yaml`).
+
+```
+8 chargers + transformer meter (sim/charger-sim.js, MQTT over mutual TLS, one X.509 cert each)
+        │  gridsync/<thing>/telemetry
+        ▼
+AWS IoT Core ── IoT Rule ──► Amazon SQS ──► Lambda "telemetry-guard"
+                                              │  Isolation Forest on every message
+                                              │  2 of 3 flagged → IoT certificate set INACTIVE
+                                              ▼
+                                           DynamoDB (charger state, load time series, events)
+                                              │  every ~4 s / on quarantine
+                                              ▼
+Utility ─► API Gateway POST /openadr ─► Step Functions EXPRESS "gridsync-control"
+                                         ReadTransformerLoad → ReadChargerStatus → AIInference (MLP + RL)
+                                         → ComputeLimits → WriteChargerState → PublishOcppCommands
+                                              │  gridsync/<thing>/cmd  SetChargingProfile
+                                              ▼
+                                           AWS IoT Core ─► chargers obey the new limit
+
+Dashboard: S3 + CloudFront ─► API Gateway GET /state ─► Lambda ─► DynamoDB
+Ops: CloudWatch dashboard "GridSync", AWS Budget alert at $10/month
+```
+
+**Deploy** (needs the AWS CLI signed in, plus Node.js):
+
+```bash
+.\aws\scripts\deploy.ps1 -BudgetEmail you@example.com
+```
+
+```bash
+cd sim; npm install; node charger-sim.js
+```
+
+Then open the CloudFront URL that the deploy prints, and go to **Live on AWS**.
+
+**Tear everything down** (IoT things, certificates, stack, buckets):
+
+```bash
+.\aws\scripts\teardown.ps1
+```
+
+**Differences from the report, and why:**
+
+| Report | Deployed | Reason |
+|---|---|---|
+| Kinesis Data Streams | IoT Rule → **SQS** → Lambda | The account's organization policy (SCP) denies Kinesis. SQS gives the same batched, buffered stream into Lambda. |
+| Amazon Timestream | **DynamoDB** time-series items with TTL | Timestream LiveAnalytics no longer accepts new customers, and it is also denied by the SCP. |
+| SageMaker endpoint | Models trained offline (`aws/scripts/export-models.js`), weights stored in S3 and served inside Lambda | An always-on endpoint costs money 24/7. Inference stays inside the < 2 s Step Functions path. |
+| Region ap-south-1 | **ap-southeast-2 (Sydney)** | The organization policy only allows this region. |
+
+## Deploy as a static site only
 
 - **Hostinger:** hPanel → File Manager → upload all `.html`, `.css` and `.js` files into `public_html`.
 - **GitHub Pages:** Settings → Pages → Deploy from branch → `main` / root.
@@ -54,4 +107,9 @@ python -m http.server 8000
 | `ml.js` | ML toolkit written from scratch: MLP with backprop + Adam, Q-learning agent, Isolation Forest |
 | `ai.js` | Grid model, training data, the three GridSync models, and their evaluation |
 | `app.js` | Live simulation, the three control modes, attack simulation, explainable-AI panel, AI Lab charts |
+| `aws-live.js` | "Live on AWS" control room that reads the deployed backend through API Gateway |
 | `index.html`, `styles.css` | Page structure, theme and animations |
+| `aws/template.yaml` | CloudFormation: IoT policy and rule, SQS, Lambda ×4, Step Functions, API Gateway, DynamoDB ×2, S3 + CloudFront, CloudWatch, Budget |
+| `aws/lambda/` | Lambda code: `guard.js` (AI IDS), `control.js` (workflow steps), `openadr.js`, `api.js` |
+| `aws/scripts/` | `export-models.js` (training job), `deploy.ps1`, `teardown.ps1` |
+| `sim/charger-sim.js` | Edge simulator: 9 IoT things over MQTT/mTLS that obey OCPP commands |

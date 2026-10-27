@@ -372,3 +372,12 @@ h4 { margin: 14px 0 6px; font-size: .9rem; }
 @media (max-width: 520px) {
   .novelty .nov { grid-template-columns: 1fr; }
 }
+
+/* ---------- live AWS control room ---------- */
+.aws-result { margin: -6px 0 14px; font-size: .9rem; min-height: 1.4em; }
+.aws-result .good, .good { color: var(--green); } .aws-result .bad { color: var(--red); }
+.small-val { font-size: 1.15rem !important; }
+.pipeline .stepbar { display: block; height: 4px; margin-top: 4px; border-radius: 3px; background: linear-gradient(90deg, var(--primary), var(--cyan)); }
+.qline { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--mono); font-size: .75rem; }
+.qline span { padding: 3px 8px; border-radius: 6px; background: rgba(255,255,255,.06); }
+.qline span.pick { background: var(--primary); color: #fff; }

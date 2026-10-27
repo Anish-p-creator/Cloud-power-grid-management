@@ -1,0 +1,11 @@
+# secrets / generated per account
+sim/certs/
+sim/config.json
+config.json
+sim/node_modules/
+
+# build output
+aws/build/
+aws/lambda/models.json
+aws/lambda/ml.js
+aws/lambda/ai.js
