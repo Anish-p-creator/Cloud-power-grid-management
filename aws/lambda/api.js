@@ -35,6 +35,9 @@ exports.handler = async (event) => {
 
   if (route === "POST /demo") {
     if (body.action === "restore") {
+      // stop the attack on the devices first, so stale bad frames cannot re-trigger the guard
+      await L.publish("gridsync/sim/demo", { action: "restore" });
+      await new Promise((r) => setTimeout(r, 3000));
       const chargers = await L.scanChargers();
       let n = 0;
       for (const c of chargers.filter((c) => c.status === "QUARANTINED")) {
@@ -45,7 +48,6 @@ exports.handler = async (event) => {
           UpdateExpression: "SET #s = :a, flags = :f", ExpressionAttributeNames: { "#s": "status" }, ExpressionAttributeValues: { ":a": "ACTIVE", ":f": [] },
         }));
       }
-      await L.publish("gridsync/sim/demo", { action: "restore" });
       await L.logEvent(`Re-provisioned: ${n} certificate(s) set ACTIVE after inspection`, "ok");
       return L.json(200, { restored: n });
     }
