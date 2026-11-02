@@ -241,7 +241,7 @@
       <article class="card lab reveal">
         <span class="lab-tag">Model 3 · Unsupervised learning</span>
         <h3>Telemetry guard: Isolation Forest IDS</h3>
-        <p class="muted small">150 random isolation trees fitted on an <b>unlabelled</b> slice of the charger message stream. Physics-informed features: voltage deviation, the P − V·I residual, compliance with the commanded limit, message cadence and power level.</p>
+        <p class="muted small">200 random isolation trees fitted on an <b>unlabelled</b> slice of the charger message stream. Physics-informed features: voltage deviation, the P − V·I residual, compliance with the commanded limit and message cadence. Normal data includes cars waiting for a limit, throttled and idle sessions, so these are never mistaken for attacks.</p>
         <div class="legend"><span><i class="sw ok"></i>Normal messages</span><span><i class="sw bad"></i>Attack messages</span></div>
         <canvas id="idsHist" height="150"></canvas>
         <div class="metrics" id="idsMetrics"></div>

@@ -1,0 +1,152 @@
+[
+    {
+        "t": "AWS::Lambda::Function",
+        "id": "ApiFunction",
+        "s": "UPDATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Integration",
+        "id": "ApiIntegration",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::Permission",
+        "id": "ApiInvokePermission",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Stage",
+        "id": "ApiStage",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::IoT::Policy",
+        "id": "ChargerPolicy",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::DynamoDB::Table",
+        "id": "ChargerStateTable",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::Function",
+        "id": "ControlFunction",
+        "s": "UPDATE_COMPLETE"
+    },
+    {
+        "t": "AWS::StepFunctions::StateMachine",
+        "id": "ControlStateMachine",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::CloudWatch::Dashboard",
+        "id": "Dashboard",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Route",
+        "id": "DemoRoute",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::Function",
+        "id": "GuardFunction",
+        "s": "UPDATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::EventSourceMapping",
+        "id": "GuardQueueMapping",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Api",
+        "id": "HttpApi",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::IAM::Role",
+        "id": "IotToQueueRole",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::IAM::Role",
+        "id": "LambdaRole",
+        "s": "UPDATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Route",
+        "id": "ModeRoute",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Budgets::Budget",
+        "id": "MonthlyBudget",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::Function",
+        "id": "OpenAdrFunction",
+        "s": "UPDATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Integration",
+        "id": "OpenAdrIntegration",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::Lambda::Permission",
+        "id": "OpenAdrInvokePermission",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Route",
+        "id": "OpenAdrRoute",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::DynamoDB::Table",
+        "id": "SiteTable",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::ApiGatewayV2::Route",
+        "id": "StateRoute",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::IAM::Role",
+        "id": "StepFunctionsRole",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::SQS::Queue",
+        "id": "TelemetryQueue",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::IoT::TopicRule",
+        "id": "TelemetryRule",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::S3::Bucket",
+        "id": "WebsiteBucket",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::S3::BucketPolicy",
+        "id": "WebsiteBucketPolicy",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::CloudFront::Distribution",
+        "id": "WebsiteDistribution",
+        "s": "CREATE_COMPLETE"
+    },
+    {
+        "t": "AWS::CloudFront::OriginAccessControl",
+        "id": "WebsiteOAC",
+        "s": "CREATE_COMPLETE"
+    }
+]

@@ -12,7 +12,7 @@ from scratch in JavaScript (no ML libraries) and trained live in the browser whe
 |---|-------|------|--------------|-----------------|
 | 1 | **Demand forecaster**: MLP 7→16→12→1, backprop + Adam | Supervised | Predicts next-hour site demand from time of day, weekday, temperature and recent load | MAE 148 kW vs 224 kW seasonal-naive (**34% lower error**), R² 0.81 |
 | 2 | **Charging agent**: tabular Q-learning | Reinforcement | Chooses what share of transformer headroom to give EVs. The forecaster's trend is part of its state | On 30 unseen days: overloads **85 → 1** and EV peak **731 → 591 kW** vs a fixed cloud rule, at 91% of the energy |
-| 3 | **Telemetry guard**: Isolation Forest (150 trees) | Unsupervised | Scores every OCPP/Kinesis message using physics features (P − V·I residual, limit compliance, cadence, voltage) | **89% attack recall** at a **0.4% false-positive rate** |
+| 3 | **Telemetry guard**: Isolation Forest (200 trees) | Unsupervised | Scores every charger message using physics features (P − V·I residual, limit compliance, cadence, voltage). Normal data includes waiting, idle and throttled sessions | **80% per-message attack recall** at **0% false positives**; no false quarantines in a live 60 s evening-rush test on AWS |
 
 Numbers come from fixed random seeds and are reproduced every time the page loads (see the **AI Lab** section).
 
@@ -95,6 +95,12 @@ Then open the CloudFront URL that the deploy prints, and go to **Live on AWS**.
 | SageMaker endpoint | Models trained offline (`aws/scripts/export-models.js`), weights stored in S3 and served inside Lambda | An always-on endpoint costs money 24/7. Inference stays inside the < 2 s Step Functions path. |
 | Region ap-south-1 | **ap-southeast-2 (Sydney)** | The organization policy only allows this region. |
 
+## Project documents
+
+- `docs/GridSync-Project-Report.pdf`: full project report
+- `docs/GridSync-Demo.mp4`: recorded demo of the live AWS system
+- `docs/GridSync-Pitch.pdf`, `docs/GridSync-Presentation-Script.pdf`, `PITCH-TEAM.md`, `DEMO-AWS.md`
+
 ## Deploy as a static site only
 
 - **Hostinger:** hPanel → File Manager → upload all `.html`, `.css` and `.js` files into `public_html`.
@@ -111,5 +117,5 @@ Then open the CloudFront URL that the deploy prints, and go to **Live on AWS**.
 | `index.html`, `styles.css` | Page structure, theme and animations |
 | `aws/template.yaml` | CloudFormation: IoT policy and rule, SQS, Lambda ×4, Step Functions, API Gateway, DynamoDB ×2, S3 + CloudFront, CloudWatch, Budget |
 | `aws/lambda/` | Lambda code: `guard.js` (AI IDS), `control.js` (workflow steps), `openadr.js`, `api.js` |
-| `aws/scripts/` | `export-models.js` (training job), `deploy.ps1`, `teardown.ps1` |
+| `aws/scripts/` | `export-models.js` (training job), `deploy.ps1`, `teardown.ps1`, `reset-demo.sh` |
 | `sim/charger-sim.js` | Edge simulator: 9 IoT things over MQTT/mTLS that obey OCPP commands |

@@ -1,0 +1,22 @@
+[
+    {
+        "n": "gridsync-control-steps",
+        "r": "nodejs22.x",
+        "m": 1024
+    },
+    {
+        "n": "gridsync-dashboard-api",
+        "r": "nodejs22.x",
+        "m": 512
+    },
+    {
+        "n": "gridsync-openadr",
+        "r": "nodejs22.x",
+        "m": 512
+    },
+    {
+        "n": "gridsync-telemetry-guard",
+        "r": "nodejs22.x",
+        "m": 512
+    }
+]

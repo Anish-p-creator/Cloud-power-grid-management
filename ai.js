@@ -271,13 +271,17 @@
       ((m.V * m.I) / 1000 - m.P) / scale,                // physics residual: P should equal V*I
       clamp((m.P - m.limit) / Math.max(20, m.limit), -1.5, 2), // compliance with commanded limit
       m.interval,                                        // message cadence
-      m.P / 350,                                         // power level
     ];
   }
+  // Normal operating states seen in the field: a car plugged in but still waiting for its
+  // first limit (~0 kW), cars drawing far less than allowed (battery taper, paused, feeder
+  // tripped), heavily throttled sessions (a few % of rating) and charging near the limit.
   function randomNormal(r) {
     const rating = r() < 0.5 ? 150 : 350;
-    const limit = rating * (0.15 + r() * 0.85);
-    const draw = limit * (0.4 + r() * 0.6);
+    const u = r();
+    if (u < 0.15) return { draw: 0.2 + r() * 0.8, limit: r() < 0.5 ? 0 : r() * 3, rating };
+    const limit = rating * (0.02 + r() * 0.98);
+    const draw = u < 0.30 ? 0.2 + r() * 0.8 : u < 0.55 ? limit * (0.05 + r() * 0.95) : limit * (0.7 + r() * 0.3);
     return { draw, limit, rating };
   }
 
@@ -290,14 +294,14 @@
       // which (like real traffic) contains a small share of unknown attacks.
       const X = [];
       const kinds = Object.keys(ATTACKS);
-      for (let i = 0; i < 3000; i++) {
+      for (let i = 0; i < 6000; i++) {
         const atk = r() < 0.02 ? kinds[Math.floor(r() * kinds.length)] : null;
         X.push(features(reading(r, { ...randomNormal(r), attack: atk })));
       }
-      this.forest = new IsolationForest(150, 256, 5).fit(X);
-      // threshold from the expected contamination rate (top 2.5% of scores)
+      this.forest = new IsolationForest(200, 256, 5).fit(X);
+      // threshold just above the expected contamination rate (top 1.5% of scores)
       const sc = X.map((x) => this.forest.score(x)).sort((a, b) => a - b);
-      this.threshold = sc[Math.floor(sc.length * 0.975)];
+      this.threshold = sc[Math.floor(sc.length * 0.985)];
       // held-out evaluation
       const rt = rng(77);
       const normal = [], attack = { bypass: [], fdi: [], flood: [] };

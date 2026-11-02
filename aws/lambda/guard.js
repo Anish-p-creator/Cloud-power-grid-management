@@ -48,6 +48,17 @@ exports.handler = async (event) => {
       flags = [...flags, score > L.GridAI.guard.threshold].slice(-3);
       if (status !== "QUARANTINED" && site.mode === "ai" && flags.filter(Boolean).length >= 2) {
         status = "QUARANTINED";
+        // two concurrent batches can flag the same charger: only the first conditional write acts
+        try {
+          await L.ddb.send(new L.UpdateCommand({
+            TableName: L.CHARGERS, Key: { deviceId: id },
+            UpdateExpression: "SET #s = :q", ConditionExpression: "attribute_not_exists(#s) OR #s <> :q",
+            ExpressionAttributeNames: { "#s": "status" }, ExpressionAttributeValues: { ":q": "QUARANTINED" },
+          }));
+        } catch (e) {
+          if (e.name === "ConditionalCheckFailedException") continue;
+          throw e;
+        }
         const n = await L.setCertificates(id, "INACTIVE");
         // the trusted site controller opens the bay contactor: a compromised charger cannot be trusted to stop itself
         await L.publish(`gridsync/${L.METER_ID}/cmd`, { action: "IsolateBay", deviceId: id });

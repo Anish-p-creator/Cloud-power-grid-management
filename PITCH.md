@@ -76,7 +76,7 @@ Open the site. The AI Lab trains on page load and takes about 5 seconds.
 |---|---|
 | MLP forecaster | MAE 148 kW · 34% better than seasonal-naive · R² 0.81 |
 | Q-learning agent | −99% overloads, −19% EV peak vs fixed rule |
-| Isolation Forest IDS | 89% recall · 0.4% false positives (FDI 100%, flooding 100%, limit bypass 66%) |
+| Isolation Forest IDS | 80% per-message recall · 0% false positives (FDI 90%, flooding 100%, limit bypass 51%); 0 false quarantines in a live 60 s rush test |
 
 ## Likely questions
 

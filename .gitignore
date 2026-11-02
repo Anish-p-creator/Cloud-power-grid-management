@@ -9,3 +9,5 @@ aws/build/
 aws/lambda/models.json
 aws/lambda/ml.js
 aws/lambda/ai.js
+docs/media/raw/
+docs/media/cards/
